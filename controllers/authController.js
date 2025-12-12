@@ -201,7 +201,7 @@ export const sendOtp = async (req, res, next) => {
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
+    console.log(otp);
     if (existingOtp) {
       // update OTP instead of creating new
       existingOtp.otp = otp;
@@ -219,11 +219,11 @@ export const sendOtp = async (req, res, next) => {
       });
     }
 
-    await sendEmail({
-      to: email,
-      subject: "Your BlogSphere OTP",
-      text: `Your OTP is: ${otp}. It expires in 5 minutes.`,
-    });
+    // await sendEmail({
+    //   to: email,
+    //   subject: "Your BlogSphere OTP",
+    //   text: `Your OTP is: ${otp}. It expires in 5 minutes.`,
+    // });
 
     res.json({
       success: true,
