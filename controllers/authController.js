@@ -224,6 +224,16 @@ export const sendOtp = async (req, res, next) => {
     //   subject: "Your BlogSphere OTP",
     //   text: `Your OTP is: ${otp}. It expires in 5 minutes.`,
     // });
+try {
+  await sendEmail({
+      to: email,
+      subject: "Your BlogSphere OTP",
+      text: `Your OTP is: ${otp}. It expires in 5 minutes.`,
+    });
+} catch (emailErr) {
+  console.error("EMAIL FAILED:", emailErr);
+  return next(new ExpressError(500, "OTP email could not be sent"));
+}
 
     res.json({
       success: true,
