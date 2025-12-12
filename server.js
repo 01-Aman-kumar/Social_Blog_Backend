@@ -17,7 +17,7 @@ dotenv.config();
 const app=express(); 
 connectDB(); 
 app.use(cors({ 
-origin: process.env.CLIENT_URL||"social-blog-frontend.vercel.app", 
+origin:"social-blog-frontend.vercel.app", 
 credentials: true, // important for cookies 
 })); 
 app.use(express.json()); 
