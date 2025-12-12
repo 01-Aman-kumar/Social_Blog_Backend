@@ -7,6 +7,7 @@ import { generateResetToken } from "../utils/generateResetToken.js";
 import dotenv from "dotenv";
 dotenv.config();
 import crypto from "crypto"; 
+import Otp from "../models/Otp.js";
 export const signup = async (req, res, next) => {
   try {
     const { name, username, email, password } = req.body;
@@ -137,7 +138,7 @@ export const forgotPassword = async (req, res, next) => {
     await user.save();
     
 
-    const resetUrl = `${process.env.CLIENT_URL}/reset-password/${token}`;
+    const resetUrl = `https://social-blog-frontend.vercel.app/reset-password/${token}`;
 
     const message = `You requested a password reset. Click below:\n\n${resetUrl}\n\nIf you didn't request this, ignore.`;
     await sendEmail({
@@ -173,6 +174,118 @@ export const resetPassword = async (req, res, next) => {
     await user.save();
 
     res.json({ success: true, message: "Password reset successful" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const sendOtp = async (req, res, next) => {
+  try {
+    const { name, username, email, password,termsAccepted } = req.body;
+     if (!termsAccepted) {
+      return next(new ExpressError(400, "You must accept Terms & Conditions"));
+    }
+
+    if (!name || !username || !email || !password)
+      return next(new ExpressError(400, "All fields are required"));
+
+    const exists = await User.findOne({ email });
+    if (exists) return next(new ExpressError(400, "Email already registered"));
+
+    let existingOtp = await Otp.findOne({ email });
+
+    // Rate limit: allow only once per 60 seconds
+    if (existingOtp && Date.now() - existingOtp.lastSentAt < 60000) {
+      const waitTime = Math.ceil((60000 - (Date.now() - existingOtp.lastSentAt)) / 1000);
+      return next(new ExpressError(429, `Please wait ${waitTime} seconds before requesting again.`));
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    if (existingOtp) {
+      // update OTP instead of creating new
+      existingOtp.otp = otp;
+      existingOtp.expiresAt = Date.now() + 5 * 60 * 1000;
+      existingOtp.lastSentAt = Date.now();
+      existingOtp.data = { name, username, email, password,termsAccepted };
+      await existingOtp.save();
+    } else {
+      await Otp.create({
+        email,
+        otp,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+        lastSentAt: Date.now(),
+        data: { name, username, email, password,termsAccepted },
+      });
+    }
+
+    await sendEmail({
+      to: email,
+      subject: "Your BlogSphere OTP",
+      text: `Your OTP is: ${otp}. It expires in 5 minutes.`,
+    });
+
+    res.json({
+      success: true,
+      message: "OTP sent",
+      cooldown: 60, // front-end countdown
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+export const verifyOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp)
+      return next(new ExpressError(400, "Email & OTP required"));
+
+    const record = await Otp.findOne({ email });
+
+    if (!record) return next(new ExpressError(400, "OTP not found"));
+
+    if (record.expiresAt < Date.now())
+      return next(new ExpressError(400, "OTP expired"));
+
+    if (record.otp !== otp)
+      return next(new ExpressError(400, "Invalid OTP"));
+
+    // create account now
+    const { name, username, password,termsAccepted } = record.data;
+    if (!termsAccepted) {
+      return next(new ExpressError(400, "Terms & Conditions must be accepted"));
+    }
+
+    const user = await User.create({
+      name,
+      username,
+      email,
+      password,
+    });
+
+    // delete OTP entry
+    await Otp.deleteMany({ email });
+
+    const token = generateToken(user._id);
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    const savedUser = await User.findById(user._id).select("-password");
+
+    res.json({
+      success: true,
+      message: "Account created successfully",
+      user: savedUser
+    });
+
   } catch (err) {
     next(err);
   }

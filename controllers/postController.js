@@ -53,7 +53,7 @@ export const getAllPosts = async (req, res, next) => {
     page = Number(page);
     limit = Number(limit);
 
-    let query = {};
+    let query = { status: "published" };
 
     // Search filter
     if (search) {
